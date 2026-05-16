@@ -152,6 +152,19 @@
     .item.checked { background: #f0fdf4; }
     .item.checked .item-label { text-decoration: line-through; color: #9ca3af; }
 
+    /* Locked by someone else */
+    .item.locked {
+      background: #f9fafb;
+      cursor: not-allowed;
+      opacity: 0.75;
+    }
+    .item.locked:hover { background: #f9fafb; }
+    .item.locked .item-label { color: #9ca3af; }
+    .item.locked .checkbox { cursor: not-allowed; border-color: #d1d5db; }
+    .item.locked.checked .checkbox { background: #22c55e; border-color: #22c55e; opacity: 0.7; }
+
+    .lock-icon { font-size: 1rem; flex-shrink: 0; }
+
     .checkbox {
       width: 24px; height: 24px;
       border-radius: 6px;
@@ -192,6 +205,7 @@
     }
 
     .name-input::placeholder { color: #d1d5db; }
+    .name-input:disabled { cursor: not-allowed; opacity: 0.6; border-bottom-color: #e5e7eb; }
 
     .delete-btn {
       background: none;
@@ -204,7 +218,7 @@
       transition: opacity 0.2s;
     }
 
-    .item:hover .delete-btn { opacity: 1; }
+    .item:not(.locked):hover .delete-btn { opacity: 1; }
 
     /* Add item form */
     .add-form {
@@ -363,6 +377,10 @@
   const db  = getDatabase(app);
   const itemsRef = ref(db, 'items');
 
+  // Unique ID per browser session — identifies "me"
+  let myId = sessionStorage.getItem('myId');
+  if (!myId) { myId = Math.random().toString(36).slice(2); sessionStorage.setItem('myId', myId); }
+
   const defaults = [
     { emoji: "🥐", name: "Croissanter" },
     { emoji: "🍳", name: "Røræg" },
@@ -388,46 +406,80 @@
 
   const list = document.getElementById('checklist');
 
-  function renderItem(key, data) {
-    const existing = document.getElementById('item-' + key);
-    if (existing) {
-      // Update existing
-      if (data.checked) existing.classList.add('checked');
-      else existing.classList.remove('checked');
-      const nameInput = existing.querySelector('.name-input');
-      if (document.activeElement !== nameInput) nameInput.value = data.name || '';
-      return;
+  function isMine(data)   { return data.claimedBy === myId; }
+  function isTaken(data)  { return data.checked && data.claimedBy && !isMine(data); }
+
+  function applyState(div, data) {
+    const taken  = isTaken(data);
+    const mine   = isMine(data);
+    const input  = div.querySelector('.name-input');
+    const lockEl = div.querySelector('.lock-icon');
+
+    if (data.checked) div.classList.add('checked'); else div.classList.remove('checked');
+
+    if (taken) {
+      div.classList.add('locked');
+      input.disabled = true;
+      if (lockEl) lockEl.textContent = '🔒';
+    } else {
+      div.classList.remove('locked');
+      input.disabled = false;
+      if (lockEl) lockEl.textContent = '';
     }
 
-    const div = document.createElement('div');
-    div.className = 'item' + (data.checked ? ' checked' : '');
-    div.id = 'item-' + key;
+    if (document.activeElement !== input) input.value = data.name || '';
+  }
 
+  function renderItem(key, data) {
+    const existing = document.getElementById('item-' + key);
+    if (existing) { applyState(existing, data); return; }
+
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.id = 'item-' + key;
     div.innerHTML = `
       <div class="checkbox"><span class="checkmark">✓</span></div>
       <span class="item-emoji">${data.emoji || '🍴'}</span>
       <span class="item-label">${data.label}</span>
-      <input class="name-input" placeholder="dit navn" value="${data.name || ''}" />
+      <input class="name-input" placeholder="dit navn" />
+      <span class="lock-icon"></span>
       <button class="delete-btn" title="Slet">✕</button>
     `;
 
     div.querySelector('.checkbox').addEventListener('click', () => {
-      update(ref(db, `items/${key}`), { checked: !div.classList.contains('checked') });
+      const taken = div.classList.contains('locked');
+      if (taken) return;
+      const nowChecked = !div.classList.contains('checked');
+      if (nowChecked) {
+        update(ref(db, `items/${key}`), { checked: true, claimedBy: myId });
+      } else {
+        // Only owner can uncheck
+        update(ref(db, `items/${key}`), { checked: false, name: '', claimedBy: null });
+      }
     });
 
     div.querySelector('.item-label').addEventListener('click', () => {
-      update(ref(db, `items/${key}`), { checked: !div.classList.contains('checked') });
+      if (div.classList.contains('locked')) return;
+      const nowChecked = !div.classList.contains('checked');
+      if (nowChecked) {
+        update(ref(db, `items/${key}`), { checked: true, claimedBy: myId });
+      } else {
+        update(ref(db, `items/${key}`), { checked: false, name: '', claimedBy: null });
+      }
     });
 
     div.querySelector('.name-input').addEventListener('input', (e) => {
+      if (div.classList.contains('locked')) return;
       update(ref(db, `items/${key}`), { name: e.target.value });
     });
 
     div.querySelector('.delete-btn').addEventListener('click', () => {
+      if (div.classList.contains('locked')) return;
       if (confirm(`Slet "${data.label}"?`)) remove(ref(db, `items/${key}`));
     });
 
     list.appendChild(div);
+    applyState(div, data);
   }
 
   let initialized = false;
@@ -436,32 +488,24 @@
     const data = snapshot.val();
 
     if (!data) {
-      // First load — seed with defaults
       const seed = {};
-      defaults.forEach(d => { seed[push(itemsRef).key] = { emoji: d.emoji, label: d.name, checked: false, name: '' }; });
+      defaults.forEach(d => { seed[push(itemsRef).key] = { emoji: d.emoji, label: d.name, checked: false, name: '', claimedBy: null }; });
       set(itemsRef, seed);
       return;
     }
 
-    if (!initialized) {
-      list.innerHTML = '';
-      initialized = true;
-    }
+    if (!initialized) { list.innerHTML = ''; initialized = true; }
 
-    // Remove deleted items from DOM
     Array.from(list.children).forEach(child => {
       const key = child.id.replace('item-', '');
       if (!data[key]) child.remove();
     });
 
-    // Render/update all items
     Object.entries(data).forEach(([key, val]) => renderItem(key, val));
 
-    // Update progress
     const total   = Object.keys(data).length;
     const checked = Object.values(data).filter(v => v.checked).length;
-    const pct = total ? (checked / total) * 100 : 0;
-    document.getElementById('fill').style.width = pct + '%';
+    document.getElementById('fill').style.width = (total ? (checked / total) * 100 : 0) + '%';
     document.getElementById('progress-text').textContent = `${checked} af ${total} valgt`;
 
     const statusEl = document.getElementById('status');
@@ -475,13 +519,12 @@
     const label = nameInput.value.trim();
     if (!label) { nameInput.focus(); return; }
     const emoji = emojiInput.value.trim() || '🍴';
-    push(itemsRef, { emoji, label, checked: false, name: '' });
-    nameInput.value  = '';
-    emojiInput.value = '';
+    push(itemsRef, { emoji, label, checked: false, name: '', claimedBy: null });
+    nameInput.value = ''; emojiInput.value = '';
     nameInput.focus();
   };
 
-  document.getElementById('new-name').addEventListener('keydown', (e) => {
+  document.getElementById('new-name').addEventListener('keydown', e => {
     if (e.key === 'Enter') window.addItem();
   });
 
@@ -490,7 +533,7 @@
     onValue(itemsRef, (snapshot) => {
       const data = snapshot.val() || {};
       const updates = {};
-      Object.keys(data).forEach(k => { updates[k] = { ...data[k], checked: false, name: '' }; });
+      Object.keys(data).forEach(k => { updates[k] = { ...data[k], checked: false, name: '', claimedBy: null }; });
       set(itemsRef, updates);
     }, { onlyOnce: true });
   };
