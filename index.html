@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="da">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Class Breakfast Checklist</title>
+  <title>Klassens Morgenmad</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -68,15 +68,14 @@
       align-items: center;
       padding: 16px 20px;
       border-bottom: 1px solid #fef3c7;
-      cursor: pointer;
-      transition: background 0.2s;
       gap: 16px;
+      transition: background 0.2s;
     }
 
     .item:last-child { border-bottom: none; }
     .item:hover { background: #fffbeb; }
     .item.checked { background: #f0fdf4; }
-    .item.checked .item-name { text-decoration: line-through; color: #9ca3af; }
+    .item.checked .item-label { text-decoration: line-through; color: #9ca3af; }
 
     .checkbox {
       width: 24px; height: 24px;
@@ -88,20 +87,21 @@
       justify-content: center;
       transition: all 0.2s;
       background: #fff;
+      cursor: pointer;
     }
 
     .item.checked .checkbox { background: #22c55e; border-color: #22c55e; }
-
     .checkmark { display: none; color: #fff; font-size: 14px; font-weight: bold; }
     .item.checked .checkmark { display: block; }
 
-    .item-emoji { font-size: 1.4rem; }
+    .item-emoji { font-size: 1.4rem; cursor: pointer; }
 
-    .item-name {
+    .item-label {
       font-size: 1rem;
       color: #1f2937;
       font-weight: 500;
       flex: 1;
+      cursor: pointer;
     }
 
     .name-input {
@@ -118,9 +118,71 @@
 
     .name-input::placeholder { color: #d1d5db; }
 
+    .delete-btn {
+      background: none;
+      border: none;
+      color: #fca5a5;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .item:hover .delete-btn { opacity: 1; }
+
+    /* Add item form */
+    .add-form {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border: 1px solid #fde68a;
+      padding: 20px;
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .add-form input[type="text"] {
+      flex: 1;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      background: #fffbeb;
+      color: #1f2937;
+    }
+
+    .add-form input[type="text"]:focus { border-color: #f59e0b; }
+
+    .emoji-input {
+      width: 56px !important;
+      flex: none !important;
+      text-align: center;
+      font-size: 1.2rem !important;
+    }
+
+    .add-btn {
+      background: #f59e0b;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .add-btn:hover { background: #d97706; }
+
     .btn-reset {
       display: block;
-      margin: 24px auto 0;
+      margin: 20px auto 0;
       background: #fbbf24;
       color: #78350f;
       border: none;
@@ -147,24 +209,31 @@
 
   <div class="header">
     <div class="emoji">🍳</div>
-    <h1>Class Breakfast</h1>
-    <p>Monday Breakfast — Sign up below!</p>
-    <div class="status" id="status">Connecting...</div>
+    <h1>Klassens Morgenmad</h1>
+    <p>Mandag morgenmad — Skriv dig på nedenfor!</p>
+    <div class="status" id="status">Forbinder...</div>
     <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
-    <div class="progress-text" id="progress-text">0 of 20 claimed</div>
+    <div class="progress-text" id="progress-text">0 valgt</div>
   </div>
 
   <div class="checklist" id="checklist"></div>
 
-  <button class="btn-reset" onclick="resetAll()">Reset All</button>
+  <!-- Add item form -->
+  <div class="add-form">
+    <input type="text" class="emoji-input" id="new-emoji" placeholder="🍴" maxlength="2" />
+    <input type="text" id="new-name" placeholder="Tilføj en ny vare..." />
+    <button class="add-btn" onclick="addItem()">+ Tilføj</button>
+  </div>
 
-  <div class="footer">Click an item to mark it as taken &nbsp;|&nbsp; Type your name in the box</div>
+  <button class="btn-reset" onclick="resetAll()">Nulstil alt</button>
+
+  <div class="footer">Klik på en vare for at markere den som taget &nbsp;|&nbsp; Skriv dit navn i feltet</div>
 
 </div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, onValue, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+  import { getDatabase, ref, onValue, update, set, push, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBAdwm30ggf8K0gIgx9CkMvuayy6AiiCa4",
@@ -178,91 +247,138 @@
 
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
-  const itemsRef = ref(db, 'checklist');
+  const itemsRef = ref(db, 'items');
 
-  const itemDefs = [
-    { emoji: "🥐", name: "Croissants" },
-    { emoji: "🍳", name: "Scrambled Eggs" },
+  const defaults = [
+    { emoji: "🥐", name: "Croissanter" },
+    { emoji: "🍳", name: "Røræg" },
     { emoji: "🥓", name: "Bacon" },
-    { emoji: "🍞", name: "Toast & Butter" },
-    { emoji: "🥞", name: "Pancakes" },
-    { emoji: "🍊", name: "Orange Juice" },
-    { emoji: "🫐", name: "Fresh Fruit Salad" },
-    { emoji: "🥛", name: "Milk" },
-    { emoji: "☕", name: "Coffee / Tea" },
+    { emoji: "🍞", name: "Toast & Smør" },
+    { emoji: "🥞", name: "Pandekager" },
+    { emoji: "🍊", name: "Appelsinjuice" },
+    { emoji: "🫐", name: "Frisk Frugtsalat" },
+    { emoji: "🥛", name: "Mælk" },
+    { emoji: "☕", name: "Kaffe / Te" },
     { emoji: "🍫", name: "Nutella" },
-    { emoji: "🫙", name: "Jam & Peanut Butter" },
-    { emoji: "🧀", name: "Cheese Slices" },
+    { emoji: "🫙", name: "Syltetøj & Jordnøddesmør" },
+    { emoji: "🧀", name: "Osteskiver" },
     { emoji: "🥨", name: "Bagels" },
-    { emoji: "🍌", name: "Bananas" },
+    { emoji: "🍌", name: "Bananer" },
     { emoji: "🍩", name: "Donuts" },
     { emoji: "🧁", name: "Muffins" },
     { emoji: "🥤", name: "Smoothies" },
-    { emoji: "🥣", name: "Cereal & Granola" },
-    { emoji: "🍓", name: "Strawberries & Cream" },
-    { emoji: "🧇", name: "Waffles" },
+    { emoji: "🥣", name: "Cornflakes & Granola" },
+    { emoji: "🍓", name: "Jordbær & Flødeskum" },
+    { emoji: "🧇", name: "Vafler" },
   ];
 
   const list = document.getElementById('checklist');
-  let ignoreUpdate = false;
 
-  // Build UI once
-  itemDefs.forEach((item, i) => {
+  function renderItem(key, data) {
+    const existing = document.getElementById('item-' + key);
+    if (existing) {
+      // Update existing
+      if (data.checked) existing.classList.add('checked');
+      else existing.classList.remove('checked');
+      const nameInput = existing.querySelector('.name-input');
+      if (document.activeElement !== nameInput) nameInput.value = data.name || '';
+      return;
+    }
+
     const div = document.createElement('div');
-    div.className = 'item';
-    div.id = 'item-' + i;
+    div.className = 'item' + (data.checked ? ' checked' : '');
+    div.id = 'item-' + key;
+
     div.innerHTML = `
       <div class="checkbox"><span class="checkmark">✓</span></div>
-      <span class="item-emoji">${item.emoji}</span>
-      <span class="item-name">${item.name}</span>
-      <input class="name-input" id="name-${i}" placeholder="your name" />
+      <span class="item-emoji">${data.emoji || '🍴'}</span>
+      <span class="item-label">${data.label}</span>
+      <input class="name-input" placeholder="dit navn" value="${data.name || ''}" />
+      <button class="delete-btn" title="Slet">✕</button>
     `;
 
-    div.addEventListener('click', (e) => {
-      if (e.target.classList.contains('name-input')) return;
-      const checked = !div.classList.contains('checked');
-      update(ref(db, `checklist/${i}`), { checked });
+    div.querySelector('.checkbox').addEventListener('click', () => {
+      update(ref(db, `items/${key}`), { checked: !div.classList.contains('checked') });
     });
 
-    const input = div.querySelector('.name-input');
-    input.addEventListener('input', () => {
-      update(ref(db, `checklist/${i}`), { name: input.value });
+    div.querySelector('.item-label').addEventListener('click', () => {
+      update(ref(db, `items/${key}`), { checked: !div.classList.contains('checked') });
+    });
+
+    div.querySelector('.name-input').addEventListener('input', (e) => {
+      update(ref(db, `items/${key}`), { name: e.target.value });
+    });
+
+    div.querySelector('.delete-btn').addEventListener('click', () => {
+      if (confirm(`Slet "${data.label}"?`)) remove(ref(db, `items/${key}`));
     });
 
     list.appendChild(div);
-  });
+  }
 
-  // Listen for real-time changes
+  let initialized = false;
+
   onValue(itemsRef, (snapshot) => {
-    const data = snapshot.val() || {};
-    let checkedCount = 0;
+    const data = snapshot.val();
 
-    itemDefs.forEach((_, i) => {
-      const state   = data[i] || {};
-      const div     = document.getElementById('item-' + i);
-      const input   = document.getElementById('name-' + i);
-      const checked = state.checked || false;
-      const name    = state.name || '';
+    if (!data) {
+      // First load — seed with defaults
+      const seed = {};
+      defaults.forEach(d => { seed[push(itemsRef).key] = { emoji: d.emoji, label: d.name, checked: false, name: '' }; });
+      set(itemsRef, seed);
+      return;
+    }
 
-      if (checked) { div.classList.add('checked'); checkedCount++; }
-      else           div.classList.remove('checked');
+    if (!initialized) {
+      list.innerHTML = '';
+      initialized = true;
+    }
 
-      if (document.activeElement !== input) input.value = name;
+    // Remove deleted items from DOM
+    Array.from(list.children).forEach(child => {
+      const key = child.id.replace('item-', '');
+      if (!data[key]) child.remove();
     });
 
-    const pct = (checkedCount / itemDefs.length) * 100;
+    // Render/update all items
+    Object.entries(data).forEach(([key, val]) => renderItem(key, val));
+
+    // Update progress
+    const total   = Object.keys(data).length;
+    const checked = Object.values(data).filter(v => v.checked).length;
+    const pct = total ? (checked / total) * 100 : 0;
     document.getElementById('fill').style.width = pct + '%';
-    document.getElementById('progress-text').textContent = `${checkedCount} of ${itemDefs.length} claimed`;
+    document.getElementById('progress-text').textContent = `${checked} af ${total} valgt`;
 
     const statusEl = document.getElementById('status');
-    statusEl.textContent = 'Live — changes sync instantly';
+    statusEl.textContent = 'Live — ændringer synkroniseres øjeblikkeligt';
     statusEl.className = 'status live';
   });
 
+  window.addItem = () => {
+    const nameInput  = document.getElementById('new-name');
+    const emojiInput = document.getElementById('new-emoji');
+    const label = nameInput.value.trim();
+    if (!label) { nameInput.focus(); return; }
+    const emoji = emojiInput.value.trim() || '🍴';
+    push(itemsRef, { emoji, label, checked: false, name: '' });
+    nameInput.value  = '';
+    emojiInput.value = '';
+    nameInput.focus();
+  };
+
+  document.getElementById('new-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') window.addItem();
+  });
+
   window.resetAll = () => {
-    const reset = {};
-    itemDefs.forEach((_, i) => { reset[i] = { checked: false, name: '' }; });
-    set(itemsRef, reset);
+    if (!confirm('Nulstil alle markeringer og navne?')) return;
+    onValue(itemsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const updates = {};
+      Object.keys(data).forEach(k => { updates[k] = { ...data[k], checked: false, name: '' }; });
+      set(itemsRef, updates);
+    }, { onlyOnce: true });
   };
 </script>
 </body>
