@@ -213,15 +213,18 @@
       color: #fff;
       border: none;
       border-radius: 6px;
-      padding: 4px 12px;
-      font-size: 0.8rem;
+      padding: 8px 14px;
+      font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
       transition: background 0.2s;
       font-family: inherit;
+      min-height: 36px;
+      touch-action: manipulation;
     }
     .confirm-btn:hover { background: #16a34a; }
+    .confirm-btn:active { background: #15803d; }
     .confirm-btn.visible { display: inline-block; }
 
     .delete-btn {
@@ -236,6 +239,7 @@
     }
 
     .item:not(.locked):hover .delete-btn { opacity: 1; }
+    @media (hover: none) { .item:not(.locked) .delete-btn { opacity: 0.4; } }
 
     /* Add item form */
     .add-form {
@@ -243,19 +247,21 @@
       border-radius: 16px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       border: 1px solid #fde68a;
-      padding: 20px;
+      padding: 16px;
       margin-top: 16px;
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       align-items: center;
     }
 
     .add-form input[type="text"] {
       flex: 1;
+      min-width: 0;
       border: 1px solid #fde68a;
       border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 0.95rem;
+      padding: 12px 14px;
+      font-size: 1rem;
       font-family: inherit;
       outline: none;
       background: #fffbeb;
@@ -269,6 +275,13 @@
       flex: none !important;
       text-align: center;
       font-size: 1.2rem !important;
+      padding: 12px 6px !important;
+    }
+
+    @media (max-width: 480px) {
+      .add-form { gap: 8px; }
+      .emoji-input { width: 48px !important; }
+      .add-btn { width: 100%; justify-content: center; }
     }
 
     .add-btn {
@@ -276,15 +289,19 @@
       color: #fff;
       border: none;
       border-radius: 8px;
-      padding: 10px 20px;
-      font-size: 0.95rem;
+      padding: 12px 20px;
+      font-size: 1rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.2s;
       white-space: nowrap;
+      flex-shrink: 0;
+      min-height: 46px;
+      touch-action: manipulation;
     }
 
     .add-btn:hover { background: #d97706; }
+    .add-btn:active { background: #b45309; }
 
     .btn-reset {
       display: block;
