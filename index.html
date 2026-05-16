@@ -14,19 +14,23 @@
       padding: 40px 20px;
     }
 
-    .container {
-      max-width: 620px;
-      margin: 0 auto;
-    }
+    .container { max-width: 620px; margin: 0 auto; }
 
-    .header {
-      text-align: center;
-      margin-bottom: 36px;
-    }
-
+    .header { text-align: center; margin-bottom: 36px; }
     .header .emoji { font-size: 3rem; }
     .header h1 { font-size: 2rem; color: #b45309; margin: 8px 0 6px; }
     .header p  { color: #92400e; font-size: 1rem; }
+
+    .status {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 0.8rem;
+      padding: 3px 12px;
+      border-radius: 20px;
+      background: #fde68a;
+      color: #92400e;
+    }
+    .status.live { background: #dcfce7; color: #166534; }
 
     .progress-bar {
       background: #fde68a;
@@ -71,13 +75,11 @@
 
     .item:last-child { border-bottom: none; }
     .item:hover { background: #fffbeb; }
-
     .item.checked { background: #f0fdf4; }
     .item.checked .item-name { text-decoration: line-through; color: #9ca3af; }
 
     .checkbox {
-      width: 24px;
-      height: 24px;
+      width: 24px; height: 24px;
       border-radius: 6px;
       border: 2px solid #fbbf24;
       flex-shrink: 0;
@@ -88,18 +90,9 @@
       background: #fff;
     }
 
-    .item.checked .checkbox {
-      background: #22c55e;
-      border-color: #22c55e;
-    }
+    .item.checked .checkbox { background: #22c55e; border-color: #22c55e; }
 
-    .checkmark {
-      display: none;
-      color: #fff;
-      font-size: 14px;
-      font-weight: bold;
-    }
-
+    .checkmark { display: none; color: #fff; font-size: 14px; font-weight: bold; }
     .item.checked .checkmark { display: block; }
 
     .item-emoji { font-size: 1.4rem; }
@@ -156,13 +149,12 @@
     <div class="emoji">🍳</div>
     <h1>Class Breakfast</h1>
     <p>Monday Breakfast — Sign up below!</p>
+    <div class="status" id="status">Connecting...</div>
     <div class="progress-bar"><div class="progress-fill" id="fill"></div></div>
     <div class="progress-text" id="progress-text">0 of 20 claimed</div>
   </div>
 
-  <div class="checklist" id="checklist">
-    <!-- Items injected by JS -->
-  </div>
+  <div class="checklist" id="checklist"></div>
 
   <button class="btn-reset" onclick="resetAll()">Reset All</button>
 
@@ -170,8 +162,25 @@
 
 </div>
 
-<script>
-  const items = [
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBAdwm30ggf8K0gIgx9CkMvuayy6AiiCa4",
+    authDomain: "breakfast-f7c80.firebaseapp.com",
+    databaseURL: "https://breakfast-f7c80-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "breakfast-f7c80",
+    storageBucket: "breakfast-f7c80.firebasestorage.app",
+    messagingSenderId: "803322615237",
+    appId: "1:803322615237:web:5c0345e647fa55a061e7ac"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+  const itemsRef = ref(db, 'checklist');
+
+  const itemDefs = [
     { emoji: "🥐", name: "Croissants" },
     { emoji: "🍳", name: "Scrambled Eggs" },
     { emoji: "🥓", name: "Bacon" },
@@ -195,8 +204,10 @@
   ];
 
   const list = document.getElementById('checklist');
+  let ignoreUpdate = false;
 
-  items.forEach((item, i) => {
+  // Build UI once
+  itemDefs.forEach((item, i) => {
     const div = document.createElement('div');
     div.className = 'item';
     div.id = 'item-' + i;
@@ -204,28 +215,55 @@
       <div class="checkbox"><span class="checkmark">✓</span></div>
       <span class="item-emoji">${item.emoji}</span>
       <span class="item-name">${item.name}</span>
-      <input class="name-input" placeholder="your name" onclick="e => e.stopPropagation()" />
+      <input class="name-input" id="name-${i}" placeholder="your name" />
     `;
+
     div.addEventListener('click', (e) => {
       if (e.target.classList.contains('name-input')) return;
-      div.classList.toggle('checked');
-      updateProgress();
+      const checked = !div.classList.contains('checked');
+      update(ref(db, `checklist/${i}`), { checked });
     });
+
+    const input = div.querySelector('.name-input');
+    input.addEventListener('input', () => {
+      update(ref(db, `checklist/${i}`), { name: input.value });
+    });
+
     list.appendChild(div);
   });
 
-  function updateProgress() {
-    const checked = document.querySelectorAll('.item.checked').length;
-    const pct = (checked / items.length) * 100;
-    document.getElementById('fill').style.width = pct + '%';
-    document.getElementById('progress-text').textContent = `${checked} of ${items.length} claimed`;
-  }
+  // Listen for real-time changes
+  onValue(itemsRef, (snapshot) => {
+    const data = snapshot.val() || {};
+    let checkedCount = 0;
 
-  function resetAll() {
-    document.querySelectorAll('.item').forEach(el => el.classList.remove('checked'));
-    document.querySelectorAll('.name-input').forEach(el => el.value = '');
-    updateProgress();
-  }
+    itemDefs.forEach((_, i) => {
+      const state   = data[i] || {};
+      const div     = document.getElementById('item-' + i);
+      const input   = document.getElementById('name-' + i);
+      const checked = state.checked || false;
+      const name    = state.name || '';
+
+      if (checked) { div.classList.add('checked'); checkedCount++; }
+      else           div.classList.remove('checked');
+
+      if (document.activeElement !== input) input.value = name;
+    });
+
+    const pct = (checkedCount / itemDefs.length) * 100;
+    document.getElementById('fill').style.width = pct + '%';
+    document.getElementById('progress-text').textContent = `${checkedCount} of ${itemDefs.length} claimed`;
+
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = 'Live — changes sync instantly';
+    statusEl.className = 'status live';
+  });
+
+  window.resetAll = () => {
+    const reset = {};
+    itemDefs.forEach((_, i) => { reset[i] = { checked: false, name: '' }; });
+    set(itemsRef, reset);
+  };
 </script>
 </body>
 </html>
