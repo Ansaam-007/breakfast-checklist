@@ -529,7 +529,12 @@
   });
 
   window.resetAll = () => {
-    if (!confirm('Nulstil alle markeringer og navne?')) return;
+    const entered = prompt('Indtast admin-kode for at nulstille listen:');
+    if (entered === null) return;
+    if (entered !== '0910') {
+      alert('Forkert admin-kode. Kun administratoren kan nulstille listen.');
+      return;
+    }
     onValue(itemsRef, (snapshot) => {
       const data = snapshot.val() || {};
       const updates = {};
