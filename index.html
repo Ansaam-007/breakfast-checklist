@@ -207,6 +207,23 @@
     .name-input::placeholder { color: #d1d5db; }
     .name-input:disabled { cursor: not-allowed; opacity: 0.6; border-bottom-color: #e5e7eb; }
 
+    .confirm-btn {
+      display: none;
+      background: #22c55e;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+      font-family: inherit;
+    }
+    .confirm-btn:hover { background: #16a34a; }
+    .confirm-btn.visible { display: inline-block; }
+
     .delete-btn {
       background: none;
       border: none;
@@ -410,10 +427,10 @@
   function isTaken(data)  { return data.checked && data.claimedBy && !isMine(data); }
 
   function applyState(div, data) {
-    const taken  = isTaken(data);
-    const mine   = isMine(data);
-    const input  = div.querySelector('.name-input');
-    const lockEl = div.querySelector('.lock-icon');
+    const taken      = isTaken(data);
+    const input      = div.querySelector('.name-input');
+    const lockEl     = div.querySelector('.lock-icon');
+    const confirmBtn = div.querySelector('.confirm-btn');
 
     if (data.checked) div.classList.add('checked'); else div.classList.remove('checked');
 
@@ -421,13 +438,17 @@
       div.classList.add('locked');
       input.disabled = true;
       if (lockEl) lockEl.textContent = '🔒';
+      if (confirmBtn) confirmBtn.classList.remove('visible');
     } else {
       div.classList.remove('locked');
       input.disabled = false;
       if (lockEl) lockEl.textContent = '';
     }
 
-    if (document.activeElement !== input) input.value = data.name || '';
+    if (document.activeElement !== input) {
+      input.value = data.name || '';
+      if (confirmBtn) confirmBtn.classList.toggle('visible', !taken && (data.name || '').trim().length > 0 && !data.checked);
+    }
   }
 
   function renderItem(key, data) {
@@ -442,19 +463,38 @@
       <span class="item-emoji">${data.emoji || '🍴'}</span>
       <span class="item-label">${data.label}</span>
       <input class="name-input" placeholder="dit navn" />
+      <button class="confirm-btn">Bekræft</button>
       <span class="lock-icon"></span>
       <button class="delete-btn" title="Slet">✕</button>
     `;
 
+    const nameInput   = div.querySelector('.name-input');
+    const confirmBtn  = div.querySelector('.confirm-btn');
+
+    // Show/hide confirm button as user types
+    nameInput.addEventListener('input', () => {
+      if (div.classList.contains('locked')) return;
+      confirmBtn.classList.toggle('visible', nameInput.value.trim().length > 0);
+    });
+
+    // Confirm button claims the item with the typed name
+    confirmBtn.addEventListener('click', () => {
+      if (div.classList.contains('locked')) return;
+      const name = nameInput.value.trim();
+      if (!name) return;
+      update(ref(db, `items/${key}`), { checked: true, claimedBy: myId, name });
+      confirmBtn.classList.remove('visible');
+    });
+
+    // Checkbox: claim without name, or release if owner
     div.querySelector('.checkbox').addEventListener('click', () => {
-      const taken = div.classList.contains('locked');
-      if (taken) return;
+      if (div.classList.contains('locked')) return;
       const nowChecked = !div.classList.contains('checked');
       if (nowChecked) {
         update(ref(db, `items/${key}`), { checked: true, claimedBy: myId });
       } else {
-        // Only owner can uncheck
         update(ref(db, `items/${key}`), { checked: false, name: '', claimedBy: null });
+        confirmBtn.classList.remove('visible');
       }
     });
 
@@ -465,12 +505,8 @@
         update(ref(db, `items/${key}`), { checked: true, claimedBy: myId });
       } else {
         update(ref(db, `items/${key}`), { checked: false, name: '', claimedBy: null });
+        confirmBtn.classList.remove('visible');
       }
-    });
-
-    div.querySelector('.name-input').addEventListener('input', (e) => {
-      if (div.classList.contains('locked')) return;
-      update(ref(db, `items/${key}`), { name: e.target.value });
     });
 
     div.querySelector('.delete-btn').addEventListener('click', () => {
