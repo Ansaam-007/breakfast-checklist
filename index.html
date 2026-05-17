@@ -325,6 +325,20 @@
       font-size: 0.85rem;
       color: #92400e;
     }
+
+    .confetti-emoji {
+      position: fixed;
+      top: -60px;
+      pointer-events: none;
+      z-index: 9999;
+      user-select: none;
+    }
+
+    @keyframes foodFall {
+      0%   { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+      70%  { opacity: 1; }
+      100% { transform: translateY(115vh) rotate(540deg) scale(0.7); opacity: 0; }
+    }
   </style>
 </head>
 <body>
@@ -367,6 +381,26 @@
 </div>
 
 <script>
+  function launchFoodConfetti() {
+    const emojis = ['🍳','🥐','🥓','🍞','🥞','🍊','🫐','🥛','☕','🍫','🧀','🥨','🍌','🍩','🧁','🥤','🥣','🍓','🧇','🍴','🫙','🧈','🥚','🍎','🍇'];
+    for (let i = 0; i < 45; i++) {
+      setTimeout(() => {
+        const el = document.createElement('span');
+        el.className = 'confetti-emoji';
+        el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        const duration = (1.8 + Math.random() * 2.2).toFixed(2);
+        el.style.cssText = `
+          left: ${(Math.random() * 100).toFixed(1)}vw;
+          font-size: ${(1.2 + Math.random() * 1.8).toFixed(2)}rem;
+          animation: foodFall ${duration}s linear forwards;
+        `;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), duration * 1000 + 300);
+      }, i * 60);
+    }
+  }
+  window.launchFoodConfetti = launchFoodConfetti;
+
   const PIN = 'S3DB';
 
   function checkPin() {
@@ -501,6 +535,7 @@
       if (!name) return;
       update(ref(db, `items/${key}`), { checked: true, claimedBy: myId, name });
       confirmBtn.classList.remove('visible');
+      window.launchFoodConfetti();
     });
 
     // Checkbox: claim without name, or release if owner
